@@ -1,0 +1,15 @@
+* text=auto eol=lf
+*.c text diff=cpp
+*.h text diff=cpp
+*.f text diff=fortran
+*.for text diff=fortran
+*.inc text diff=fortran
+*.f90 text diff=fortran
+*.f95 text diff=fortran
+*.f03 text diff=fortran
+*.f08 text diff=fortran
+*.f18 text diff=fortran
+*.f23 text diff=fortran
+*.sh text eol=lf
+Makefile text eol=lf
+CMakeLists.txt text eol=lf

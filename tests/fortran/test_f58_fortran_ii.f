@@ -1,0 +1,43 @@
+C> @file test_f58_fortran_ii.f
+C> @brief Integration test suite for IBM 704 FORTRAN II (1958) layer.
+      COMMON /FAH2CM/ LASTER, LASTST, NREQS
+      DIMENSION IURL(128), IKEY(16), IVAL(16), IBDY(16), IOUT(128)
+      CALL FH2INI(IERR)
+      IF (IERR) 900, 10, 900
+   10 IRC = IHMKST(IPORT)
+      IF (IRC) 900, 20, 900
+   20 CALL FH2CLI(1, ICLI, IERR)
+      IF (IERR) 900, 30, 900
+   30 IRC = IHMKUL(IPORT, 0, 0, IURL, NURL)
+      CALL FH2REQ(ICLI, 0, IURL, NURL, IKEY, 0, IVAL, 0, IBDY, 0,
+     1 IOUT, 128, ISTS, NOUT, IERR)
+      IF (IERR) 900, 40, 900
+   40 IF (LASTST - 200) 900, 50, 900
+   50 IRC = IHMKUL(IPORT, 1, 0, IURL, NURL)
+      IKEY(1) = 88
+      IKEY(2) = 45
+      IKEY(3) = 67
+      IKEY(4) = 117
+      IKEY(5) = 115
+      IKEY(6) = 116
+      IKEY(7) = 111
+      IKEY(8) = 109
+      IVAL(1) = 73
+      IVAL(2) = 73
+      IBDY(1) = 79
+      IBDY(2) = 75
+      CALL FH2REQ(ICLI, 1, IURL, NURL, IKEY, 8, IVAL, 2, IBDY, 2,
+     1 IOUT, 128, ISTS, NOUT, IERR)
+      IF (IERR) 900, 60, 900
+   60 IF (NREQS - 2) 900, 70, 900
+   70 CALL FH2REQ(0, 0, IURL, NURL, IKEY, 0, IVAL, 0, IBDY, 0, IOUT,
+     1 128, ISTS, NOUT, IERR)
+      IF (LASTER) 80, 900, 80
+   80 CALL FH2FIN(ICLI, IERR)
+      IF (IERR) 900, 90, 900
+   90 IDM = IHMKSP(IPORT)
+      CALL FH2CLN(IERR)
+      IF (IERR) 900, 100, 900
+  100 STOP
+  900 STOP 1
+      END

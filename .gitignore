@@ -1,0 +1,53 @@
+# Build & CMake artifacts
+build/
+build-*/
+.build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile.cmake
+Testing/
+compile_commands.json
+_deps/
+
+# Fortran module & object artifacts
+*.mod
+*.smod
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Coverage & profiling artifacts
+*.gcno
+*.gcda
+*.gcov
+*.info
+*.profraw
+*.profdata
+coverage/
+coverage.json
+coverage.xml
+htmlcov/
+
+# Documentation output
+docs/doxygen/
+docs/ford/
+
+# OS & editor files
+.DS_Store
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+__pycache__/
+*.pyc

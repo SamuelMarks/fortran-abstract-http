@@ -1,0 +1,226 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format-and-lint:
+    name: Format, Dialect, Docs & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout fortran-abstract-http
+        uses: actions/checkout@v7
+        with:
+          path: fortran-abstract-http
+
+      - name: Checkout c-abstract-http
+        uses: actions/checkout@v7
+        with:
+          repository: SamuelMarks/c-abstract-http
+          path: c-abstract-http
+
+      - name: Checkout cdd-c
+        uses: actions/checkout@v7
+        with:
+          repository: SamuelMarks/cdd-c
+          path: cdd-c
+
+      - name: Install tools
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            cmake doxygen graphviz gcc gfortran python3 python3-venv
+          python3 -m venv "${RUNNER_TEMP}/fmt-venv"
+          "${RUNNER_TEMP}/fmt-venv/bin/pip" install --quiet clang-format
+          echo "${RUNNER_TEMP}/fmt-venv/bin" >> "${GITHUB_PATH}"
+
+      - name: Check C89 formatting (clang-format)
+        working-directory: fortran-abstract-http
+        run: make fmt-check
+
+      - name: Check all 12 FORTRAN / Fortran dialects & F-III preprocessor
+        working-directory: fortran-abstract-http
+        run: |
+          make dialect-check
+          python3 tools/fah_f3_preproc.py --check src/legacy/fah_f60.f
+
+      - name: Check 100% C89 Doxygen & Fortran documentation coverage
+        working-directory: fortran-abstract-http
+        run: make doc-check
+
+      - name: Check panic/unwrap ban & error-enum discipline
+        working-directory: fortran-abstract-http
+        run: python3 tools/fah_lint.py --check-all
+
+      - name: Build cdd-c CLI & verify deterministic FFI regeneration
+        working-directory: fortran-abstract-http
+        run: |
+          cmake -S ../cdd-c -B ../cdd-c/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DC_CDD_BUILD_TESTS=OFF \
+            -DCDD_DEPS=FETCHCONTENT
+          cmake --build ../cdd-c/build -j
+          CDD_BIN="$(find ../cdd-c/build -type f -name 'cdd-c' -perm -111 | head -n 1)"
+          test -n "${CDD_BIN}"
+          CDD_C_BIN="${CDD_BIN}" sh scripts/regen-ffi.sh
+          git diff --exit-code generated/
+
+  build-and-test:
+    name: Build & Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GCC + gfortran
+            os: ubuntu-latest
+            cc: gcc
+            fc: gfortran
+            extra_cmake: ""
+          - name: Linux Clang + gfortran
+            os: ubuntu-latest
+            cc: clang
+            fc: gfortran
+            extra_cmake: "-DC_ABSTRACT_HTTP_USE_RAW_SOCKETS=ON"
+          - name: macOS AppleClang + gfortran
+            os: macos-latest
+            cc: clang
+            fc: gfortran
+            extra_cmake: ""
+          - name: macOS GCC + gfortran
+            os: macos-latest
+            cc: gcc-14
+            fc: gfortran
+            extra_cmake: "-DC_ABSTRACT_HTTP_USE_RAW_SOCKETS=ON"
+    steps:
+      - name: Checkout fortran-abstract-http
+        uses: actions/checkout@v7
+        with:
+          path: fortran-abstract-http
+
+      - name: Checkout c-abstract-http
+        uses: actions/checkout@v7
+        with:
+          repository: SamuelMarks/c-abstract-http
+          path: c-abstract-http
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            cmake gcc clang gfortran libcurl4-openssl-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          if ! command -v gfortran >/dev/null 2>&1; then
+            brew install gcc
+          fi
+
+      - name: Configure CMake
+        working-directory: fortran-abstract-http
+        run: |
+          C_BIN="${{ matrix.cc }}"
+          if [ "${RUNNER_OS}" = "macOS" ] && [ "${C_BIN}" = "gcc-14" ]; then
+            for v in 16 15 14 13; do
+              if command -v "gcc-${v}" >/dev/null 2>&1; then
+                C_BIN="$(command -v "gcc-${v}")"
+                break
+              fi
+            done
+          fi
+          cmake -S . -B build \
+            -DCMAKE_C_COMPILER="${C_BIN}" \
+            -DCMAKE_Fortran_COMPILER="${{ matrix.fc }}" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_TESTING=ON \
+            -DFAH_BUILD_TESTING=ON \
+            ${{ matrix.extra_cmake }}
+
+      - name: Build all 12 Fortran layers & C89 FFI bridge
+        working-directory: fortran-abstract-http
+        run: cmake --build build -j
+
+      - name: Run 14 CTest suites
+        working-directory: fortran-abstract-http
+        run: ctest --test-dir build --output-on-failure
+
+  coverage:
+    name: 100% C89 & Fortran Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout fortran-abstract-http
+        uses: actions/checkout@v7
+        with:
+          path: fortran-abstract-http
+
+      - name: Checkout c-abstract-http
+        uses: actions/checkout@v7
+        with:
+          repository: SamuelMarks/c-abstract-http
+          path: c-abstract-http
+
+      - name: Install dependencies
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            cmake gcc gfortran python3
+
+      - name: Run unified gcov 100% line & function coverage gate
+        working-directory: fortran-abstract-http
+        run: sh scripts/run-coverage.sh build-coverage
+
+  sanitizers:
+    name: ASan + UBSan Memory Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout fortran-abstract-http
+        uses: actions/checkout@v7
+        with:
+          path: fortran-abstract-http
+
+      - name: Checkout c-abstract-http
+        uses: actions/checkout@v7
+        with:
+          repository: SamuelMarks/c-abstract-http
+          path: c-abstract-http
+
+      - name: Install dependencies
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            cmake gcc gfortran
+
+      - name: Configure & build with ASan + UBSan
+        working-directory: fortran-abstract-http
+        run: |
+          cmake -S . -B build-asan \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_Fortran_COMPILER=gfortran \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DFAH_BUILD_TESTING=ON \
+            -DFAH_USE_ASAN=ON \
+            -DC_ABSTRACT_HTTP_USE_RAW_SOCKETS=ON
+          cmake --build build-asan -j
+
+      - name: Run CTest under ASan + UBSan
+        working-directory: fortran-abstract-http
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build-asan --output-on-failure

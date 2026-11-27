@@ -1,0 +1,22 @@
+name = "fortran-abstract-http"
+version = "0.1.0"
+license = "Apache-2.0 OR MIT"
+author = "Samuel Marks"
+maintainer = "Samuel Marks"
+description = "Multi-era FORTRAN (I) through Fortran 2023 FFI SDK for c-abstract-http"
+keywords = ["http", "http3", "quic", "websocket", "sse", "oauth2", "ffi", "fortran"]
+
+[library]
+source-dir = "src"
+include-dir = ["include", "generated"]
+
+[build]
+auto-executables = false
+auto-tests = false
+auto-examples = false
+link = ["c-abstract-http"]
+
+[fortran]
+implicit-typing = false
+implicit-external = false
+source-form = "default"
